@@ -34,6 +34,10 @@ static torch::Tensor conv2d(const torch::Tensor& x, const torch::Tensor& w, int 
     if (stage == "naive") launch_naive(xp, wp, yp, s, st);
     else if (stage == "smem") launch_smem(xp, wp, yp, s, st);
     else if (stage == "regtile") launch_regtile(xp, wp, yp, s, st);
+    else if (stage == "vec") {
+        auto wt = torch::empty_like(w);
+        launch_vec(xp, wp, yp, wt.data_ptr<float>(), s, st);
+    }
     else TORCH_CHECK(false, "unknown stage: ", stage);
     C10_CUDA_KERNEL_LAUNCH_CHECK();
     return y;
@@ -44,6 +48,7 @@ static py::dict kernel_info(const std::string& stage, int K, int S) {
     if (stage == "naive") i = info_naive(K, S);
     else if (stage == "smem") i = info_smem(K, S);
     else if (stage == "regtile") i = info_regtile(K, S);
+    else if (stage == "vec") i = info_vec(K, S);
     else TORCH_CHECK(false, "unknown stage: ", stage);
     py::dict d;
     d["regs_per_thread"] = i.regs_per_thread;
@@ -59,5 +64,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("conv2d", &conv2d, "direct conv2d, NCHW fp32", py::arg("x"), py::arg("w"),
           py::arg("stride"), py::arg("pad"), py::arg("stage"));
     m.def("kernel_info", &kernel_info, "registers, shared memory and occupancy for a stage");
-    m.def("stages", []() { return std::vector<std::string>{"naive", "smem", "regtile"}; });
+    m.def("stages", []() { return std::vector<std::string>{"naive", "smem", "regtile", "vec"}; });
 }

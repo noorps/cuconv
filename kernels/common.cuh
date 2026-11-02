@@ -57,6 +57,9 @@ void launch_regtile(const float* x, const float* w, float* y, ConvShape s, cudaS
 KernelInfo info_naive(int K, int S);
 KernelInfo info_smem(int K, int S);
 KernelInfo info_regtile(int K, int S);
+// Stage 4 needs a workspace of Co*Ci*K*K floats for the transposed weights.
+void launch_vec(const float* x, const float* w, float* y, float* wt, ConvShape s, cudaStream_t st);
+KernelInfo info_vec(int K, int S);
 
 // Instantiate launch/info for every (K, S) pair this repo uses. Each stage
 // file defines LAUNCH_BODY(K, S) and INFO_BODY(K, S) and expands this.

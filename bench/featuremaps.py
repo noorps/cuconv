@@ -111,7 +111,8 @@ def main():
     ax1 = fig.add_subplot(gs[0, 1])
     ax2 = fig.add_subplot(gs[0, 2])
     name = {"naive": "stage 1, naive", "smem": "stage 2, shared memory",
-            "regtile": "stage 3, register tile"}.get(stage, stage)
+            "regtile": "stage 3, register tile",
+            "vec": "stage 4, float4 smem + channel batch"}.get(stage, stage)
     grid(ax1, m, f"my kernel ({name}), 64 channels")
     grid(ax2, r, "cuDNN, 64 channels")
     fig.suptitle("resnet18 conv1 (7x7, stride 2) over a photograph: my kernel vs cuDNN", x=0.02,
