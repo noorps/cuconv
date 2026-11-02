@@ -136,21 +136,29 @@ def parse_ncu_csv(text):
 
 
 def attribute(kernels, stages, batches):
-    """ncu lists launches in order; profile_target emits, per shape, cuDNN's
-    launches then one launch per stage. Walk them in the same order."""
+    """ncu lists launches in order. For every shape, ncu_target emits cuDNN's
+    launches and then each stage in order; the last stage's main kernel
+    closes the group. Inside a group, our kernels are named by stage
+    (conv_<stage>, plus stage 4's transpose_weights helper); anything else is
+    cuDNN's."""
     shapes = [s for s in common.shapes() if s["N"] in {int(b) for b in batches.split(",")}]
+    groups, cur = [], []
+    for k in kernels:
+        cur.append(k)
+        if f"conv_{stages[-1]}" in k["kernel"]:
+            groups.append(cur)
+            cur = []
     out = []
-    i = 0
-    for s in shapes:
+    for s, group in zip(shapes, groups):
         label = common.shape_label(s)
-        # cuDNN: every kernel until the first of ours
-        while i < len(kernels) and not any(f"conv_{st}" in kernels[i]["kernel"] for st in stages):
-            out.append(dict(shape=label, stage="cudnn", **kernels[i]))
-            i += 1
-        for st in stages:
-            if i < len(kernels) and f"conv_{st}" in kernels[i]["kernel"]:
-                out.append(dict(shape=label, stage=st, **kernels[i]))
-                i += 1
+        for k in group:
+            stage = "cudnn"
+            for st in stages:
+                if f"conv_{st}" in k["kernel"]:
+                    stage = st
+            if "transpose_weights" in k["kernel"]:
+                stage = "vec:transpose"
+            out.append(dict(shape=label, stage=stage, **k))
     return out
 
 
