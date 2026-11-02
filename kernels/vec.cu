@@ -1,17 +1,21 @@
 // Stage 4: what the profiler asked for.
 //
-// Nsight Compute on stage 3 said: FMA pipe 82% busy, DRAM under 6%, bank
-// conflicts negligible, but only 44-62% of executed instructions were FFMAs.
-// The rest were shared-memory loads (one LDS per weight, one per input value)
-// and the per-channel fill-and-barrier. So this stage cuts instructions, not
-// bytes:
+// Nsight Compute on stage 3 said: DRAM under 6% of peak, bank conflicts
+// negligible, achieved occupancy at its theoretical 75%, FMA pipe 50-82%
+// busy, and the top stall reasons were the barrier and the global-load
+// scoreboard (3x3) or the math pipe itself (5x5). Only 44-62% of executed
+// instructions were FFMAs. So this stage spends fewer instructions per
+// multiply-add and overlaps the tile fill with compute:
 //
 //   - weights are transposed once to [Ci][K*K][Co] so a thread's four output
-//     channels sit together and come in as one float4 load (LDS.128);
+//     channels sit together and come in as one float4 shared load;
 //   - the input strip a thread needs per filter row is read as float4s from
 //     a row stride that is a multiple of four;
-//   - CI_T input channels are staged per barrier instead of one, so the
-//     fill loop and the two __syncthreads() are amortised over four channels.
+//   - CI_T input channels are staged per barrier instead of one;
+//   - the next group's global loads are issued into registers before the
+//     current group is computed, so they are in flight during the FFMAs
+//     (Turing has no cp.async; this is the register-staged version);
+//   - every tile index is computed once per block, not once per channel.
 //
 // Same block tile as stage 3 (16 channels x 8 rows x 32 columns, 256
 // threads, 4x4 micro-tile per thread). The transposed-weight buffer is a
@@ -41,7 +45,7 @@ template <int K, int S>
 __global__ void __launch_bounds__(VEC_THREADS, 3)
 conv_vec(const float* __restrict__ x, const float* __restrict__ wt, float* __restrict__ y,
          int Ci, int H, int W, int Co, int P, int OH, int OW) {
-    constexpr int CI_T = (S == 1) ? 4 : 1;         // channels staged per barrier
+    constexpr int CI_T = (S == 1) ? (K == 7 ? 2 : 4) : 1;   // channels staged per barrier
     constexpr int IN_H = (OH_T - 1) * S + K;
     constexpr int IN_W = (OW_T - 1) * S + K;
     constexpr int STRIP = (TN - 1) * S + K;        // input floats a thread needs per row
@@ -50,6 +54,8 @@ conv_vec(const float* __restrict__ x, const float* __restrict__ wt, float* __res
     constexpr int IN_WP = ((IN_W > NEED ? IN_W : NEED) + 3) & ~3; // row stride, multiple of 4
     constexpr int XS_CH = IN_H * IN_WP;
     constexpr int WS_CH = K * K * CO_T;            // per channel: [kh*K+kw][co]
+    constexpr int XPT = (IN_H * IN_W + VEC_THREADS - 1) / VEC_THREADS;   // tile elements per thread
+    constexpr int WPT = (WS_CH + VEC_THREADS - 1) / VEC_THREADS;         // weight elements per thread
     __shared__ __align__(16) float xs[CI_T * XS_CH];
     __shared__ __align__(16) float ws[CI_T * WS_CH];
 
@@ -66,31 +72,66 @@ conv_vec(const float* __restrict__ x, const float* __restrict__ wt, float* __res
     const int iw0 = ow0 * S - P;
     const float* xn = x + (size_t)n * Ci * H * W;
 
+    // Per-block index precomputation: where each of this thread's tile
+    // elements comes from in the image (or -1 if it is padding / past the
+    // tile) and where it goes in shared memory. Independent of the channel.
+    int xsrc[XPT], xdst[XPT];
+#pragma unroll
+    for (int e = 0; e < XPT; ++e) {
+        const int i = tid + e * VEC_THREADS;
+        const int rr = i / IN_W;
+        const int cc = i - rr * IN_W;
+        const int ih = ih0 + rr, iw = iw0 + cc;
+        const bool in_tile = i < IN_H * IN_W;
+        xdst[e] = in_tile ? rr * IN_WP + cc : -1;
+        xsrc[e] = (in_tile && ih >= 0 && ih < H && iw >= 0 && iw < W) ? ih * W + iw : -1;
+    }
+    int wsrc[WPT];
+#pragma unroll
+    for (int e = 0; e < WPT; ++e) {
+        const int i = tid + e * VEC_THREADS;
+        const int kk = i / CO_T;
+        const int co = co0 + (i - kk * CO_T);
+        wsrc[e] = (i < WS_CH && co < Co) ? kk * Co + co : -1;
+    }
+
+    float xpre[CI_T][XPT], wpre[CI_T][WPT];
+    auto load_group = [&](int ci0) {
+#pragma unroll
+        for (int cl = 0; cl < CI_T; ++cl) {
+            const int ci = ci0 + cl;
+            const float* xc = xn + (size_t)ci * H * W;
+            const float* wc = wt + (size_t)ci * K * K * Co;
+#pragma unroll
+            for (int e = 0; e < XPT; ++e) xpre[cl][e] = (ci < Ci && xsrc[e] >= 0) ? xc[xsrc[e]] : 0.f;
+#pragma unroll
+            for (int e = 0; e < WPT; ++e) wpre[cl][e] = (ci < Ci && wsrc[e] >= 0) ? wc[wsrc[e]] : 0.f;
+        }
+    };
+    auto store_group = [&]() {
+#pragma unroll
+        for (int cl = 0; cl < CI_T; ++cl) {
+#pragma unroll
+            for (int e = 0; e < XPT; ++e) if (xdst[e] >= 0) xs[cl * XS_CH + xdst[e]] = xpre[cl][e];
+#pragma unroll
+            for (int e = 0; e < WPT; ++e) {
+                const int i = tid + e * VEC_THREADS;
+                if (i < WS_CH) ws[cl * WS_CH + i] = wpre[cl][e];
+            }
+        }
+    };
+
     float acc[TM][TN];
 #pragma unroll
     for (int i = 0; i < TM; ++i)
 #pragma unroll
         for (int j = 0; j < TN; ++j) acc[i][j] = 0.f;
 
+    load_group(0);
     for (int ci0 = 0; ci0 < Ci; ci0 += CI_T) {
-#pragma unroll
-        for (int cl = 0; cl < CI_T; ++cl) {
-            const int ci = ci0 + cl;
-            const float* xc = xn + (size_t)ci * H * W;
-            for (int i = tid; i < IN_H * IN_W; i += VEC_THREADS) {
-                const int rr = i / IN_W;
-                const int cc = i - rr * IN_W;
-                const int ih = ih0 + rr, iw = iw0 + cc;
-                const bool ok = ci < Ci && ih >= 0 && ih < H && iw >= 0 && iw < W;
-                xs[cl * XS_CH + rr * IN_WP + cc] = ok ? xc[ih * W + iw] : 0.f;
-            }
-            for (int i = tid; i < WS_CH; i += VEC_THREADS) {
-                const int kk = i / CO_T;
-                const int co = co0 + (i - kk * CO_T);
-                ws[cl * WS_CH + i] = (ci < Ci && co < Co) ? wt[((size_t)ci * K * K + kk) * Co + co] : 0.f;
-            }
-        }
+        store_group();                       // registers -> shared
         __syncthreads();
+        if (ci0 + CI_T < Ci) load_group(ci0 + CI_T);   // next group's loads fly during compute
 
 #pragma unroll
         for (int cl = 0; cl < CI_T; ++cl) {
