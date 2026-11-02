@@ -92,12 +92,17 @@ def main():
     diff = (mine - ref).abs()
     max_abs = diff.max().item()
     ref_max = ref.abs().max().item()
+    # fp64 ground truth on the CPU, so "identical to cuDNN" is not the only evidence
+    truth = torch.nn.functional.conv2d(x.double().cpu(), w.double().cpu(), stride=2, padding=3)
+    mine_vs_truth = (mine.double().cpu() - truth).abs().max().item()
+    cudnn_vs_truth = (ref.double().cpu() - truth).abs().max().item()
     stats = dict(stage=stage, max_abs_err=max_abs, max_rel_err=max_abs / ref_max, ref_max=ref_max,
                  mean_abs_err=diff.mean().item(), n_values=ref.numel(),
+                 max_abs_err_vs_fp64=mine_vs_truth, cudnn_max_abs_err_vs_fp64=cudnn_vs_truth,
                  output_shape=list(ref.shape), weights="torchvision resnet18 IMAGENET1K_V1 conv1",
                  image=credit, device=common.device_record())
     print(f"{stage} vs cuDNN on resnet18.conv1: max abs {max_abs:.3e}, max rel {stats['max_rel_err']:.3e}"
-          f" over {ref.numel():,} values")
+          f" over {ref.numel():,} values; vs fp64: mine {mine_vs_truth:.3e}, cuDNN {cudnn_vs_truth:.3e}")
 
     m = mine[0].cpu().numpy()
     r = ref[0].cpu().numpy()
@@ -113,16 +118,18 @@ def main():
     name = {"naive": "stage 1, naive", "smem": "stage 2, shared memory",
             "regtile": "stage 3, register tile",
             "vec": "stage 4, float4 smem + channel batch"}.get(stage, stage)
-    grid(ax1, m, f"my kernel ({name}), 64 channels")
+    grid(ax1, m, f"my kernel ({name.split(',')[0]}), 64 channels")
     grid(ax2, r, "cuDNN, 64 channels")
     fig.suptitle("resnet18 conv1 (7x7, stride 2) over a photograph: my kernel vs cuDNN", x=0.02,
                  ha="left", fontsize=15, fontweight="bold", color=INK, y=0.975)
     fig.text(0.02, 0.925, f"Pretrained ImageNet weights from torchvision. {stats['device']['gpu']}, "
              f"CUDA {stats['device']['cuda_runtime']}, fp32. Each channel scaled to its own range.",
              fontsize=9.5, color=INK2)
-    fig.text(0.5, 0.045, f"max |mine - cuDNN| = {max_abs:.2e}  (relative to max |cuDNN| = {ref_max:.2f}: "
+    fig.text(0.5, 0.065, f"max |mine - cuDNN| = {max_abs:.2e}  (relative to max |cuDNN| = {ref_max:.2f}: "
              f"{stats['max_rel_err']:.2e}), over {ref.numel():,} output values",
              ha="center", fontsize=12.5, color=INK)
+    fig.text(0.5, 0.035, f"against an fp64 reference on the CPU: max |mine - fp64| = {mine_vs_truth:.2e}, "
+             f"max |cuDNN - fp64| = {cudnn_vs_truth:.2e}", ha="center", fontsize=10.5, color=INK2)
     fig.text(0.98, 0.012, f"photo: {credit.split(' [')[0]}", ha="right", fontsize=8.5, color=INK2)
     for e in ("png", "svg"):
         p = os.path.join(outdir, f"featuremaps.{e}")

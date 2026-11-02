@@ -78,12 +78,13 @@ def main():
                             zorder=4, solid_capstyle="butt")
                     if si == len(stages) - 1:
                         ax.text(xpos, r["gflops_max"] + ymax * 0.012, f"{r['pct_cudnn']:.0f}%",
-                                ha="center", va="bottom", fontsize=8.5, color=INK2)
+                                ha="center", va="bottom", fontsize=8.5, color=INK2,
+                                bbox=dict(facecolor=SURFACE, edgecolor="none", pad=1.0))
             ax.plot(xs, cud, color=CUDNN, lw=1.6, ls=(0, (4, 3)), marker="D", ms=6,
                     markerfacecolor=SURFACE, markeredgewidth=1.6, zorder=5)
             for gi, v in enumerate(cud):
-                ax.text(gi + 0.1, v + ymax * 0.03, f"cuDNN {v:,.0f}", ha="left", va="bottom", fontsize=8.5,
-                        color=INK2)
+                ax.text(gi, v + ymax * 0.035, f"cuDNN" + chr(10) + f"{v:,.0f}", ha="center", va="bottom", fontsize=8,
+                        color=INK2, linespacing=1.1, bbox=dict(facecolor=SURFACE, edgecolor="none", pad=1.5))
             ax.set_xticks(xs)
             ax.set_xticklabels(layer_names)
             ax.set_xlim(-0.6, len(layer_names) - 0.4 + 0.35)
@@ -102,21 +103,24 @@ def main():
     handles = [Patch(facecolor=STAGE_COLORS[i], label=STAGE_NAMES.get(st, st)) for i, st in enumerate(stages)]
     handles.append(Line2D([0], [0], color=CUDNN, lw=1.6, ls=(0, (4, 3)), marker="D", ms=6,
                           markerfacecolor=SURFACE, label="cuDNN (via PyTorch)"))
-    fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.005, 0.925), ncol=len(handles),
+    fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.005, 0.905), ncol=len(handles),
                frameon=False, fontsize=10, handlelength=1.6, columnspacing=1.4)
     smi = dev.get("nvidia_smi", {})
-    clocks = [r["clocks"]["sm_mhz"] for r in rows if r.get("clocks", {}).get("sm_mhz")]
+    clocks = [r["clock_during"]["sm_mhz_median"] for r in rows if r.get("clock_during", {}).get("available")]
+    if not clocks:
+        clocks = [r["clocks"]["sm_mhz"] for r in rows if r.get("clocks", {}).get("sm_mhz")]
     clock_note = f" SM clock during the run {min(clocks)}-{max(clocks)} MHz (max {smi.get('clocks.max.sm', '?')})." if clocks else ""
     cudnn_v = dev["cudnn"]
     cudnn_s = f"{cudnn_v // 10000}.{(cudnn_v // 100) % 100}.{cudnn_v % 100}" if isinstance(cudnn_v, int) else str(cudnn_v)
     fig.suptitle("Direct 2D convolution, fp32 NCHW: my kernels against cuDNN", x=0.012, ha="left",
                  fontsize=15, fontweight="bold", color=INK, y=0.985)
-    fig.text(0.012, 0.945,
+    import textwrap
+    fig.text(0.012, 0.955, textwrap.fill(
              f"{dev['gpu']}, CUDA {dev['cuda_runtime']}, cuDNN {cudnn_s}, driver {smi.get('driver_version', '?')}. "
              f"Bars: median of {data['method']['repeats']} repeats, whisker = min to max; label = last stage as % of cuDNN. "
-             f"Peak fp32 {dev.get('peak_fp32_gflops') or '?'} GFLOP/s at max clock.{clock_note}",
-             fontsize=9.5, color=INK2)
-    fig.tight_layout(rect=(0, 0, 1, 0.885))
+             f"Peak fp32 {dev.get('peak_fp32_gflops') or '?'} GFLOP/s at max clock.{clock_note}", 150),
+             fontsize=9.5, color=INK2, va="top", linespacing=1.3)
+    fig.tight_layout(rect=(0, 0, 1, 0.865))
     for ext in ("png", "svg"):
         p = os.path.join(outdir, f"gflops.{ext}")
         fig.savefig(p, dpi=200, facecolor=SURFACE)
