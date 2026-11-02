@@ -87,7 +87,7 @@ def time_fn(fn, sampler):
     return per_launch_ms, sampler.summary()
 
 
-def summarize(ms_list, s, clock, device):
+def summarize(ms_list, clock, s, device):
     med = statistics.median(ms_list)
     fl = common.flops(s)
     mb = common.min_bytes(s)
