@@ -105,7 +105,7 @@ def cudnn_kernels(ext, stages):
 def run_ncu(ncu, metrics, stages, batches, log_path):
     cmd = [ncu, "--csv", "--target-processes", "all", "--profile-from-start", "off",
            "--metrics", ",".join(metrics),
-           sys.executable, os.path.join(common.ROOT, "bench", "profile_target.py"),
+           sys.executable, os.path.join(common.ROOT, "bench", "ncu_target.py"),
            "--stages", ",".join(stages), "--batches", batches]
     print("running:", " ".join(cmd), flush=True)
     p = subprocess.run(cmd, text=True, capture_output=True, cwd=common.ROOT)
