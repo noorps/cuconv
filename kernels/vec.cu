@@ -94,6 +94,7 @@ conv_vec(const float* __restrict__ x, const float* __restrict__ wt, float* __res
 
 #pragma unroll
         for (int cl = 0; cl < CI_T; ++cl) {
+            if (ci0 + cl >= Ci) break;             // uniform across the block: no wasted channels
             const float* xsc = xs + cl * XS_CH;
             const float* wsc = ws + cl * WS_CH + cg * TM;
 #pragma unroll
