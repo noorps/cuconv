@@ -26,11 +26,16 @@ def main():
             common.cudnn_conv(x, w, s)
         torch.cuda.synchronize()
         print("SHAPE", common.shape_label(s), flush=True)
+        # ncu runs with --profile-from-start off, so only launches between
+        # start() and stop() are profiled: cuDNN's, then one per stage. The
+        # randn/scaling kernels that build the inputs stay out of the report.
+        torch.cuda.profiler.start()
         common.cudnn_conv(x, w, s)
         torch.cuda.synchronize()
         for st in stages:
             ext.conv2d(x, w, s["S"], s["P"], st)
             torch.cuda.synchronize()
+        torch.cuda.profiler.stop()
 
 
 if __name__ == "__main__":

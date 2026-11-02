@@ -106,7 +106,7 @@ def main():
     fig.text(0.012, 0.945,
              f"{dev['gpu']}, CUDA {dev['cuda_runtime']}, cuDNN {dev['cudnn']}, driver {smi.get('driver_version', '?')}. "
              f"Bars: median of {data['method']['repeats']} repeats, whisker = min to max. "
-             f"Label = best stage as % of cuDNN. Peak fp32 {dev.get('peak_fp32_gflops', '?'):,} GFLOP/s.",
+             f"Label = best stage as % of cuDNN. Peak fp32 {dev.get('peak_fp32_gflops') or '?'} GFLOP/s.",
              fontsize=9.5, color=INK2)
     fig.tight_layout(rect=(0, 0, 1, 0.93))
     for ext in ("png", "svg"):

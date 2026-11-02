@@ -95,7 +95,7 @@ def cudnn_kernels(ext, stages):
         with profile(activities=[ProfilerActivity.CUDA]) as prof:
             common.cudnn_conv(x, w, s)
             torch.cuda.synchronize()
-        names = [e.name for e in prof.events() if e.device_type.name == "CUDA"]
+        names = [e.name for e in prof.events() if str(e.device_type).endswith("CUDA")]
         out[common.shape_label(s)] = names
         del x, w
     torch.cuda.empty_cache()
@@ -103,7 +103,8 @@ def cudnn_kernels(ext, stages):
 
 
 def run_ncu(ncu, metrics, stages, batches, log_path):
-    cmd = [ncu, "--csv", "--target-processes", "all", "--metrics", ",".join(metrics),
+    cmd = [ncu, "--csv", "--target-processes", "all", "--profile-from-start", "off",
+           "--metrics", ",".join(metrics),
            sys.executable, os.path.join(common.ROOT, "bench", "profile_target.py"),
            "--stages", ",".join(stages), "--batches", batches]
     print("running:", " ".join(cmd), flush=True)
