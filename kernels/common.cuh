@@ -48,7 +48,7 @@ static KernelInfo query_info(Kern kernel, int threads_per_block) {
     return info;
 }
 
-static inline int ceil_div(int a, int b) { return (a + b - 1) / b; }
+__host__ __device__ static inline int ceil_div(int a, int b) { return (a + b - 1) / b; }
 
 // One entry point per stage, implemented in kernels/<stage>.cu.
 void launch_naive(const float* x, const float* w, float* y, ConvShape s, cudaStream_t st);
