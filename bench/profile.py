@@ -158,7 +158,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--label", default="latest")
     ap.add_argument("--stages", default=None)
-    ap.add_argument("--batches", default="1")
+    ap.add_argument("--batches", default="1,32")
     args = ap.parse_args()
     common.setup_torch()
     ext = common.build()

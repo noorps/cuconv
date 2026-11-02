@@ -66,7 +66,7 @@ def main():
         x, w = common.make_inputs(s)
         label = common.shape_label(s)
         cud = summarize(time_fn(lambda: common.cudnn_conv(x, w, s)), s)
-        cud.update(stage="cudnn", shape=label, **{k: s[k] for k in ("N", "Ci", "Co", "H", "W", "K", "S")},
+        cud.update(stage="cudnn", shape=label, name=s["name"], **{k: s[k] for k in ("N", "Ci", "Co", "H", "W", "K", "S")},
                    flops=common.flops(s), min_bytes=common.min_bytes(s), pct_cudnn=100.0,
                    pct_peak_fp32=(100 * cud["gflops"] / peak_gf) if peak_gf else None,
                    pct_peak_dram=(100 * cud["effective_gbps"] / peak_bw) if peak_bw else None,
@@ -77,7 +77,7 @@ def main():
         for st in stages:
             r = summarize(time_fn(lambda: ext.conv2d(x, w, s["S"], s["P"], st)), s)
             info = ext.kernel_info(st, s["K"], s["S"])
-            r.update(stage=st, shape=label, **{k: s[k] for k in ("N", "Ci", "Co", "H", "W", "K", "S")},
+            r.update(stage=st, shape=label, name=s["name"], **{k: s[k] for k in ("N", "Ci", "Co", "H", "W", "K", "S")},
                      flops=common.flops(s), min_bytes=common.min_bytes(s),
                      pct_cudnn=100 * r["gflops"] / cud["gflops"],
                      pct_peak_fp32=(100 * r["gflops"] / peak_gf) if peak_gf else None,

@@ -44,6 +44,8 @@ def main():
     ks = sorted({r["K"] for r in rows})
     ns = sorted({r["N"] for r in rows})
     layer_names = [l[0] for l in common.LAYERS]
+    for r in rows:   # older bench.json files lack the layer name
+        r.setdefault("name", f"{r['Ci']}->{r['Co']} @{r['H']}")
 
     plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 11, "axes.edgecolor": AXIS,
                          "axes.labelcolor": INK2, "xtick.color": INK2, "ytick.color": INK2,
