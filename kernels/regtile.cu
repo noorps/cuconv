@@ -110,7 +110,7 @@ static void launch_regtile_t(const float* x, const float* w, float* y, ConvShape
 }
 
 void launch_regtile(const float* x, const float* w, float* y, ConvShape s, cudaStream_t st) {
-#define X(K, S) if (s.K == K && s.S == S) { launch_regtile_t<K, S>(x, w, y, s, st); return; }
+#define X(KK, SS) if (s.K == KK && s.S == SS) { launch_regtile_t<KK, SS>(x, w, y, s, st); return; }
     FOR_EACH_INSTANCE(X)
 #undef X
 }

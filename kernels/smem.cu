@@ -60,7 +60,7 @@ static void launch_smem_t(const float* x, const float* w, float* y, ConvShape s,
 }
 
 void launch_smem(const float* x, const float* w, float* y, ConvShape s, cudaStream_t st) {
-#define X(K, S) if (s.K == K && s.S == S) { launch_smem_t<K, S>(x, w, y, s, st); return; }
+#define X(KK, SS) if (s.K == KK && s.S == SS) { launch_smem_t<KK, SS>(x, w, y, s, st); return; }
     FOR_EACH_INSTANCE(X)
 #undef X
 }
