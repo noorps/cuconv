@@ -19,7 +19,8 @@ import common  # noqa: E402
 
 # Ordinal blue ramp, light to dark, one step per stage (validated ordinal palette).
 STAGE_COLORS = ["#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]
-STAGE_NAMES = {"naive": "1 naive", "smem": "2 shared memory", "regtile": "3 register tile"}
+STAGE_NAMES = {"naive": "1 naive", "smem": "2 shared memory", "regtile": "3 register tile",
+               "vec": "4 float4 smem + channel batch"}
 SURFACE = "#fcfcfb"
 INK = "#0b0b0b"
 INK2 = "#52514e"
@@ -50,10 +51,9 @@ def main():
     plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 11, "axes.edgecolor": AXIS,
                          "axes.labelcolor": INK2, "xtick.color": INK2, "ytick.color": INK2,
                          "text.color": INK})
-    fig, axes = plt.subplots(len(ks), len(ns), figsize=(13, 8.2), sharey=True, dpi=200,
+    fig, axes = plt.subplots(len(ks), len(ns), figsize=(13, 8.6), sharey=False, dpi=200,
                              facecolor=SURFACE)
     axes = axes.reshape(len(ks), len(ns))
-    ymax = max(r["gflops_max"] for r in rows) * 1.12
     width = 0.8 / len(stages)
 
     for i, K in enumerate(ks):
@@ -61,6 +61,7 @@ def main():
             ax = axes[i][j]
             ax.set_facecolor(SURFACE)
             sub = [r for r in rows if r["K"] == K and r["N"] == N]
+            ymax = max(r["gflops_max"] for r in sub) * 1.18   # each panel has its own scale
             xs = list(range(len(layer_names)))
             cud = []
             for gi, name in enumerate(layer_names):
@@ -81,7 +82,8 @@ def main():
             ax.plot(xs, cud, color=CUDNN, lw=1.6, ls=(0, (4, 3)), marker="D", ms=6,
                     markerfacecolor=SURFACE, markeredgewidth=1.6, zorder=5)
             for gi, v in enumerate(cud):
-                ax.text(gi + 0.42, v, f"{v:,.0f}", ha="left", va="center", fontsize=8.5, color=INK2)
+                ax.text(gi + 0.1, v + ymax * 0.03, f"cuDNN {v:,.0f}", ha="left", va="bottom", fontsize=8.5,
+                        color=INK2)
             ax.set_xticks(xs)
             ax.set_xticklabels(layer_names)
             ax.set_xlim(-0.6, len(layer_names) - 0.4 + 0.35)
@@ -100,17 +102,21 @@ def main():
     handles = [Patch(facecolor=STAGE_COLORS[i], label=STAGE_NAMES.get(st, st)) for i, st in enumerate(stages)]
     handles.append(Line2D([0], [0], color=CUDNN, lw=1.6, ls=(0, (4, 3)), marker="D", ms=6,
                           markerfacecolor=SURFACE, label="cuDNN (via PyTorch)"))
-    fig.legend(handles=handles, loc="upper right", bbox_to_anchor=(0.995, 0.985), ncol=len(handles),
-               frameon=False, fontsize=10)
+    fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.005, 0.925), ncol=len(handles),
+               frameon=False, fontsize=10, handlelength=1.6, columnspacing=1.4)
     smi = dev.get("nvidia_smi", {})
+    clocks = [r["clocks"]["sm_mhz"] for r in rows if r.get("clocks", {}).get("sm_mhz")]
+    clock_note = f" SM clock during the run {min(clocks)}-{max(clocks)} MHz (max {smi.get('clocks.max.sm', '?')})." if clocks else ""
+    cudnn_v = dev["cudnn"]
+    cudnn_s = f"{cudnn_v // 10000}.{(cudnn_v // 100) % 100}.{cudnn_v % 100}" if isinstance(cudnn_v, int) else str(cudnn_v)
     fig.suptitle("Direct 2D convolution, fp32 NCHW: my kernels against cuDNN", x=0.012, ha="left",
                  fontsize=15, fontweight="bold", color=INK, y=0.985)
     fig.text(0.012, 0.945,
-             f"{dev['gpu']}, CUDA {dev['cuda_runtime']}, cuDNN {dev['cudnn']}, driver {smi.get('driver_version', '?')}. "
-             f"Bars: median of {data['method']['repeats']} repeats, whisker = min to max. "
-             f"Label = best stage as % of cuDNN. Peak fp32 {dev.get('peak_fp32_gflops') or '?'} GFLOP/s.",
+             f"{dev['gpu']}, CUDA {dev['cuda_runtime']}, cuDNN {cudnn_s}, driver {smi.get('driver_version', '?')}. "
+             f"Bars: median of {data['method']['repeats']} repeats, whisker = min to max; label = last stage as % of cuDNN. "
+             f"Peak fp32 {dev.get('peak_fp32_gflops') or '?'} GFLOP/s at max clock.{clock_note}",
              fontsize=9.5, color=INK2)
-    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    fig.tight_layout(rect=(0, 0, 1, 0.885))
     for ext in ("png", "svg"):
         p = os.path.join(outdir, f"gflops.{ext}")
         fig.savefig(p, dpi=200, facecolor=SURFACE)
