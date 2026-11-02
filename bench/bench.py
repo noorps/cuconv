@@ -10,6 +10,7 @@ shape, not a fixed one.
 """
 import argparse
 import statistics
+import time
 
 import torch
 
@@ -119,6 +120,15 @@ def main():
 
     rows = []
     clocks = {"before": common.clocks_now()}
+    # Bring the clock governor out of idle before anything is timed: the first
+    # configuration otherwise runs at a few hundred MHz while the card ramps.
+    spin_x, spin_w = common.make_inputs(common.shapes()[-1])
+    t0 = time.time()
+    while time.time() - t0 < 5.0:
+        common.cudnn_conv(spin_x, spin_w, common.shapes()[-1])
+    torch.cuda.synchronize()
+    del spin_x, spin_w
+    clocks["after_spin"] = common.clocks_now()
     for s in common.shapes():
         x, w = common.make_inputs(s)
         label = common.shape_label(s)
