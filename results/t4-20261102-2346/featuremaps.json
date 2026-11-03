@@ -1,0 +1,45 @@
+{
+  "stage": "vec",
+  "max_abs_err": 0.0,
+  "max_rel_err": 0.0,
+  "ref_max": 16.161746978759766,
+  "mean_abs_err": 0.0,
+  "n_values": 802816,
+  "max_abs_err_vs_fp64": 5.803649775870667e-06,
+  "cudnn_max_abs_err_vs_fp64": 5.803649775870667e-06,
+  "output_shape": [
+    1,
+    64,
+    112,
+    112
+  ],
+  "weights": "torchvision resnet18 IMAGENET1K_V1 conv1",
+  "image": "Chelsea, scikit-image sample data, CC0 (Stefan van der Walt)",
+  "device": {
+    "gpu": "Tesla T4",
+    "sm_count": 40,
+    "compute_capability": "7.5",
+    "total_memory_gb": 14.56,
+    "max_threads_per_sm": 1024,
+    "memory_bus_width_bits": 256,
+    "nvidia_smi": {
+      "name": "Tesla T4",
+      "driver_version": "580.82.07",
+      "clocks.max.sm": "1590",
+      "clocks.max.mem": "5001",
+      "clocks.sm": "840",
+      "clocks.mem": "5000",
+      "memory.total": "15360",
+      "pstate": "P0",
+      "power.limit": "70.00",
+      "temperature.gpu": "67"
+    },
+    "torch": "2.11.0+cu130",
+    "cuda_runtime": "13.0",
+    "cudnn": 92700,
+    "nvcc": "Cuda compilation tools, release 13.0, V13.0.88",
+    "timestamp": "2026-11-02 23:52:03 UTC",
+    "peak_fp32_gflops": 8140.8,
+    "peak_dram_gbps": 320.1
+  }
+}
