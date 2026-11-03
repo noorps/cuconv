@@ -20,7 +20,7 @@ import common  # noqa: E402
 # Ordinal blue ramp, light to dark, one step per stage (validated ordinal palette).
 STAGE_COLORS = ["#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]
 STAGE_NAMES = {"naive": "1 naive", "smem": "2 shared memory", "regtile": "3 register tile",
-               "vec": "4 float4 smem + channel batch"}
+               "vec": "4 float4 + prefetch"}
 SURFACE = "#fcfcfb"
 INK = "#0b0b0b"
 INK2 = "#52514e"
@@ -83,7 +83,7 @@ def main():
             ax.plot(xs, cud, color=CUDNN, lw=1.6, ls=(0, (4, 3)), marker="D", ms=6,
                     markerfacecolor=SURFACE, markeredgewidth=1.6, zorder=5)
             for gi, v in enumerate(cud):
-                ax.text(gi, v + ymax * 0.035, f"cuDNN" + chr(10) + f"{v:,.0f}", ha="center", va="bottom", fontsize=8,
+                ax.text(gi - 0.15, v + ymax * 0.035, f"cuDNN" + chr(10) + f"{v:,.0f}", ha="center", va="bottom", fontsize=8,
                         color=INK2, linespacing=1.1, bbox=dict(facecolor=SURFACE, edgecolor="none", pad=1.5))
             ax.set_xticks(xs)
             ax.set_xticklabels(layer_names)
